@@ -24,12 +24,14 @@ Adafruit_NeoPixel pixels(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
 
 void setup()
 {
-  // These lines are specifically to support the Adafruit Trinket 5V 16 MHz.
-  // Any other board, you can remove this part (but no harm leaving it):
-#if defined(__AVR_ATtiny85__) && (F_CPU == 16000000)
-  clock_prescale_set(clock_div_1);
-#endif
-  // END of Trinket-specific code.
+  // These lines are specifically to try overclocking @ 16Mhz,
+  // not officially supported at 3.3V, but has been known to work
+
+/*
+F_CPU == 16000000;
+clock_prescale_set(clock_div_1);
+*/
+  // END of overclocking code.
 
   pixels.begin(); // INITIALIZE NeoPixel strip object (REQUIRED)
 }
