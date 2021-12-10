@@ -22,6 +22,39 @@ Adafruit_NeoPixel pixels(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
 
 #define DELAYVAL 1 // Time (in milliseconds) to pause between pixels
 
+#define SIP_INDEX_MAX 32  //number of points in the source intensity profile
+uint8_t sip[SIP_INDEX_MAX]; // array to store the source intensity profile
+
+uint8_t pixel_position[] = {51,102,153,204}; // led virtual position between 0...255
+
+void init_sip() {
+  uint8_t i, j;
+  float ratio, jsquared;
+
+  j = SIP_INDEX_MAX / 2;
+  jsquared = j*j;
+  
+  for (i=0; i<j; i++) {
+    ratio = i * i / jsquared;
+    sip[i] = 255 * ratio;
+  }
+
+  for (i=j; i<SIP_INDEX_MAX; i++) {
+    ratio = (i-SIP_INDEX_MAX-1) * (i-SIP_INDEX_MAX-1) / jsquared;
+    sip[i] = 255 * ratio;
+  }
+}
+
+uint8_t pixel_intensity(uint8_t pixel_index, int sip_origin){ // pixel index 0..NUMPIXELS-1
+  int sip_index;
+
+  sip_index = (int)pixel_position[pixel_index] - sip_origin;
+
+  if (sip_index<0) return 0; // negative origins default to 0 intensity
+  if (sip_index >= SIP_INDEX_MAX) return 0; // origins beyond SIP bounds default to 0 intensity
+  return sip[sip_index];
+}
+
 void setup()
 {
   // These lines are specifically to try overclocking @ 16Mhz,
@@ -34,14 +67,30 @@ clock_prescale_set(clock_div_1);
   // END of overclocking code.
 
   pixels.begin(); // INITIALIZE NeoPixel strip object (REQUIRED)
+  pixels.clear(); // Set all pixel colors to 'off'
+
+  init_sip();
 }
 
 void loop()
 {
+  static uint16_t step=0;
+  int source_origin = 0;
+
   uint32_t huenow;
   const uint32_t hue_green = 21845;
-  pixels.clear(); // Set all pixel colors to 'off'
 
+  if (step<256) source_origin = step;  // first move origin to the right with each step
+  else if (step<511) source_origin = 510-step; // when the origin hits 256 move it to the left
+  else {  // wrap step back to 0 after 511 steps
+    source_origin = 0;
+    step = 0;
+  }  
+
+for (uint8_t i = 0; i<NUMPIXELS; i++){
+  pixels.setPixelColor(i,pixels.ColorHSV(hue_green,255,pixel_intensity(i,source_origin)));
+}
+/*
   huenow=0;
   while (huenow < hue_green)
   {
@@ -67,5 +116,6 @@ void loop()
     delay(DELAYVAL); // Pause before next pass through loop
     huenow -= 4;
   }
-
+*/
 }
+
