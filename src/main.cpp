@@ -152,125 +152,95 @@ uint8_t sip[] =
      0};
 
 int SIP_SIZE = sizeof(sip) / sizeof(sip[0]); //number of points in the source intensity profile
-int left_bound = 1 - SIP_SIZE;               // sets the left bound for the source position
-int right_bound = 96;                        //sets the right bound for the source position
-uint16_t position_range = right_bound - left_bound;
+int led_step[NUMPIXELS];
+uint16_t led_hue[NUMPIXELS]; // hue of each pix
+#define HUE_GREEN 21845
+#define HUE_RED 0
 
-uint8_t pixel_position[] = {0, 32, 64, 96}; // led virtual position between 0...255
+uint8_t rand8bit()
+{
+  // LFSR using Galois agorithm for 8-bit  x^8+x^6+x^5+x^4+x^0
+  uint8_t lsb;
+  uint8_t start_state = 0x1f; /* Any nonzero start state will work. */
+  static uint8_t lfsr = start_state;
 
-uint8_t pixel_intensity(uint8_t pixel_index, int sip_origin)
-{ // pixel index 0..NUMPIXELS-1
-  int sip_index;
+  lsb = lfsr & 1u; /* Get LSB (i.e., the output bit). */
+  lfsr >>= 1;      /* Shift register */
+  if (lsb)         /* If the output bit is 1, */
+    lfsr ^= 0xB8;  /*  apply toggle mask. */
 
-  sip_index = (int)pixel_position[pixel_index] - sip_origin;
-
-  if (sip_index < 0)
-    return 0; // negative origins default to 0 intensity
-  if (sip_index >= SIP_SIZE)
-    return 0; // origins beyond SIP bounds default to 0 intensity
-  return sip[sip_index];
+  return lfsr;
 }
 
 void setup()
 {
   // These lines are specifically to try overclocking @ 16Mhz,
   // not officially supported at 3.3V, but has been known to work
-#ifdef __SERIALDEBUG__
-  delay(5000);
-  Serial.begin(9600); // open the serial port at 9600 bps:
-  Serial.print("SIP_SIZE=");
-  Serial.println(SIP_SIZE);
-  Serial.print("left_bound=");
-  Serial.println(left_bound);
-  Serial.print("right_bound=");
-  Serial.println(right_bound);
-  Serial.print("position_range=");
-  Serial.println(position_range);
-#endif
 
   /*
 F_CPU == 16000000;
 clock_prescale_set(clock_div_1);
 */
   // END of overclocking code.
-
+#ifdef __SERIALDEBUG__
+  delay(5000);
+#endif
   pixels.begin(); // INITIALIZE NeoPixel strip object (REQUIRED)
   pixels.clear(); // Set all pixel colors to 'off'
+
+  for (uint8_t i = 0; i < NUMPIXELS; i++)
+  {
+    led_step[i] = -1; // -1 indicates not activated
+    led_hue[i] = HUE_GREEN;
+  }
 }
 
 void loop()
 {
-  static uint16_t step = 0;
-  static uint16_t midpoint_step = position_range / 2;
-  int source_origin = 0;
-
-  const uint32_t hue_green = 21845; //green hue
-  const uint32_t hue_red = 0; //red hue
-  static uint32_t huenow = hue_green;
-
-  if (step < midpoint_step)
-    source_origin = left_bound + step * 2; // first move origin to the right with each step
-  else if (step < position_range+1)
-    source_origin = right_bound - (step - midpoint_step) * 2; // when the origin hits 256 move it to the left
-
-#ifdef __SERIALDEBUG__
-  Serial.print(step);
-  Serial.print(":");
-  Serial.print(source_origin);
-  Serial.print(" ");
-#endif
+  uint8_t diceroll;
 
   for (uint8_t i = 0; i < NUMPIXELS; i++)
   {
-    pixels.setPixelColor(i, pixels.ColorHSV(huenow, 255, pixel_intensity(i, source_origin)));
-#ifdef __SERIALDEBUG__
-    Serial.print(i);
-    Serial.print(",");
-    Serial.print(pixel_intensity(i, source_origin));
-    Serial.print(" ");
-#endif
+    if (led_step[i] < 0)
+    {                        // if not activated, roll the dice to activate
+      diceroll = rand8bit(); // 0..255
+
+      if (diceroll < 5)
+      {
+        led_step[i] = 0;
+        if (diceroll & 1u)
+          led_hue[i] = HUE_GREEN;
+        else
+          led_hue[i] = HUE_RED;
+      }
+    }
+    if (led_step[i] >= 0)
+      pixels.setPixelColor(i, pixels.ColorHSV(led_hue[i], 255, sip[led_step[i]]));
   }
+
 #ifdef __SERIALDEBUG__
-  Serial.println();
+  Serial.print(led_step[0]);
+  Serial.print(" ");
+  Serial.print(led_step[1]);
+  Serial.print(" ");
+  Serial.print(led_step[2]);
+  Serial.print(" ");
+  Serial.println(led_step[3]);
 #endif
+
   pixels.show();
-  step++;
-  if (step > position_range)
+
+  for (uint8_t i = 0; i < NUMPIXELS; i++)
   {
-    step = 0;
-    if (huenow == hue_green) huenow = hue_red;
-    else huenow = hue_green;
+    if (led_step[i] >= 0)  // only step activated LEDs
+    {
+      ++led_step[i];
+      if (led_step[i] > SIP_SIZE - 1) // if cycled through the whole profile
+        led_step[i] = -1;
+    }
   }
 
 #ifdef __DELAYVAL__
   delay(__DELAYVAL__);
 #endif
-
-  /*
-  huenow=0;
-  while (huenow < hue_green)
-  {
-    // The first NeoPixel in a strand is #0, second is 1, all the way up
-    // to the count of pixels minus one.
-
-    pixels.fill(pixels.gamma32(pixels.ColorHSV(huenow)));
-    pixels.show(); // Send the updated pixel colors to the hardware.
-
-    delay(DELAYVAL); // Pause before next pass through loop
-    huenow += 4;
-  }
-
-
-  while (huenow > 0)
-  {
-    // The first NeoPixel in a strand is #0, second is 1, all the way up
-    // to the count of pixels minus one.
-
-    pixels.fill(pixels.gamma32(pixels.ColorHSV(huenow)));
-    pixels.show(); // Send the updated pixel colors to the hardware.
-
-    delay(DELAYVAL); // Pause before next pass through loop
-    huenow -= 4;
-  }
-*/
 }
