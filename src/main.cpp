@@ -4,9 +4,6 @@
 // Adafruit NeoPixel library
 
 #include <Adafruit_NeoPixel.h>
-#ifdef __AVR__
-#include <avr/power.h> // Required for 16 MHz Adafruit Trinket
-#endif
 
 // Which pin on the Arduino is connected to the NeoPixels?
 #define PIN 0 // On Trinket or Gemma, suggest changing this to 1
@@ -157,31 +154,23 @@ uint16_t led_hue[NUMPIXELS]; // hue of each pix
 #define HUE_GREEN 21845
 #define HUE_RED 0
 
-uint8_t rand8bit()
+uint16_t rand16bit()
 {
-  // LFSR using Galois agorithm for 8-bit  x^8+x^6+x^5+x^4+x^0
+  // LFSR using Galois agorithm for 16-bit  x^8+x^6+x^5+x^4+x^0
   uint8_t lsb;
-  uint8_t start_state = 0x1f; /* Any nonzero start state will work. */
-  static uint8_t lfsr = start_state;
+  uint16_t start_state = 43981; /* Any nonzero start state will work. */
+  static uint16_t lfsr = start_state;
 
   lsb = lfsr & 1u; /* Get LSB (i.e., the output bit). */
   lfsr >>= 1;      /* Shift register */
   if (lsb)         /* If the output bit is 1, */
-    lfsr ^= 0xB8;  /*  apply toggle mask. */
+    lfsr ^= 0xB400u;  /*  apply toggle mask for 16-bit maximal period*/
 
   return lfsr;
 }
 
 void setup()
 {
-  // These lines are specifically to try overclocking @ 16Mhz,
-  // not officially supported at 3.3V, but has been known to work
-
-  /*
-F_CPU == 16000000;
-clock_prescale_set(clock_div_1);
-*/
-  // END of overclocking code.
 #ifdef __SERIALDEBUG__
   delay(5000);
 #endif
@@ -197,18 +186,18 @@ clock_prescale_set(clock_div_1);
 
 void loop()
 {
-  uint8_t diceroll;
+  uint16_t diceroll;
 
   for (uint8_t i = 0; i < NUMPIXELS; i++)
   {
     if (led_step[i] < 0)
     {                        // if not activated, roll the dice to activate
-      diceroll = rand8bit(); // 0..255
+      diceroll = rand16bit(); // 0..65535
 
-      if (diceroll < 5)
+      if (diceroll < 10000) // picked threshold to give a pleasing amount of jitter (higher less jitter)
       {
         led_step[i] = 0;
-        if (diceroll & 1u)
+        if (diceroll & 0b10000000)
           led_hue[i] = HUE_GREEN;
         else
           led_hue[i] = HUE_RED;
